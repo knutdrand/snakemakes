@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 macs_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.narrowPeak"]
+broad_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.broadPeak"]
 genome_sizes = {"mm10": "mm", "hg38": "hs"}
 jaspar_address = "http://jaspar.genereg.net/api/v1/matrix/"
 
@@ -36,7 +37,7 @@ def macs_input(wildcards):
         i.append("{species}/dedup/%s.bed" % INPUT(wildcards.sample))
     return i
 
-rule callpeak_w_control:
+rule callpeak:
     input:
         macs_input
     output:
@@ -44,7 +45,26 @@ rule callpeak_w_control:
     run:
         genomesize=genome_sizes.get(wildcards.species, 2913022398)
         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
-        shell("""macs2 callpeak -t {input[0]} {control} -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""")
+        shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""" % control)
+
+
+rule call_broad_peak:
+    input:
+        macs_input
+    output:
+        expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
+    run:
+        genomesize=genome_sizes.get(wildcards.species, 2913022398)
+        control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
+        shell("""macs2 callpeak -t {input[0]} {control} -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""")
+
+rule sort_peaks:
+    input:
+        "{species}/peakcalling/{sample}_peaks.narrowPeak"
+    output:
+        "{species}/sorted_peaks/{sample}.narrowPeak"
+    shell:
+        "sort -nr -k5 {input} > {output}"
 
 rule get_peak_sequences:
     input:
@@ -67,13 +87,14 @@ rule motif_enrichment:
 rule motif_plot:
     input:
         "{species}/motif_matches/{sample}/fimo.tsv",
-        "{species}/peak_fasta/{sample}.fa"
+        "{species}/sorted_peaks/{sample}.narrowPeak"
     output:
-        report("{species}/motif_plots/{sample}.png")
+        report("{species}/motif_plots/{sample}.png", category="Motif_plots")
     run:
+        get_name = lambda parts: f"{parts[0]}:{parts[1]}-{parts[2]}"
         matches = {line.split("\t")[2] for line in open(input[0]) if not line.startswith("#") and line.strip()}
-        print(matches)
-        hits = [(line[1:].strip() in matches) for line in open(input[1]) if line.startswith(">")]
+        hits = [get_name(line.split()) in matches for line in open(input[1])]
+        #hits = [(line[1:].strip() in matches) for line in open(input[1]) if line.startswith(">")]
         ratio = np.cumsum(hits)/np.arange(1, len(hits)+1)
         plt.plot(ratio)
         print(output[0])

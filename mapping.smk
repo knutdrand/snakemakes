@@ -88,11 +88,10 @@ rule samtools_remove_duplicates:
         "{species}/mapped_filtered/{sample}.bam"
     output:
         bam="{species}/dedup/{sample}.bam",
-        metrics="metrics/dedup/{species}/{sample}.txt"
     log:
-        "logs/picard/dedup/{species}/{sample}.log"
+        "logs/dedup/{species}/{sample}.log"
     shell:
-        "samtools markdup -rs -f {output.metrics} {input} {output} 2> {log}"
+        "samtools markdup -rs {input} {output} 2> {log}"
 
 rule bamtobed:
     input:
@@ -107,7 +106,7 @@ rule fastq_screen:
         "reads/{sample}.fastq.gz"
     output:
         txt="qc/fastq_screen/{sample}.txt",
-        png=report("qc/fastq_screen/{sample}.png")
+        png=report("qc/fastq_screen/{sample}.png", category="SpeciesScreen")
     params:
         fastq_screen_config=config["data_dir"]+"fastq_screen_config.txt",
         subset=1000000,
