@@ -1,10 +1,17 @@
-include: "mapping.smk"
+if False:
+    include: "dropbox.smk"
+else:
+    include: "mapping.smk"
+    include: "nels.smk"
 include: "peakcalling.smk"
-include: "nels.smk"
 include: "trackhub.smk"
+include: "donwloads.smk"
+include: "regions.smk"
+include: "gc.smk"
+
 
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
-species_dict = {"mouse": "mm10", "bovine": "bosTau8"}
+species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11"}
 
 def get_samples_for_analysis(analysis_name):
     if not analysis_name in analysis_info:
@@ -29,6 +36,18 @@ rule all_screen:
 rule all_motifs:
     input:    
         [get_species(sample) + f"/motif_plots/{sample}.png" for sample in get_samples_for_analysis("Motif")]
+
+rule all_gc:
+    input:
+        [get_species(sample) + f"/gc_content/{sample}.txt" for sample in get_samples_for_analysis("GC")],
+    output:
+        "hg38/v3/gc_content/ALL.tsv"
+    shell:
+        """
+        echo "domains_minus_tss500\tnon_tss_containing_domains\tdomain_flanks\ttss_containing_domains\tname" > {output}
+        cat {input} >> {output}
+        """
+
 
 rule full_screen_table:
     input:

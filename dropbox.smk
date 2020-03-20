@@ -1,9 +1,19 @@
 from snakemake.remote.dropbox import RemoteProvider as DropboxRemoteProvider
+import pandas as pd
 # print(config["drobpoxtoken"])
 token = open("/home/knut/Projects/dropbox.token").read().strip()
 DBox = DropboxRemoteProvider(oauth2_access_token=token)
-rule test:
+samples = pd.read_csv(config["sampleinfo"]).set_index("filename")
+analysis = pd.read_csv(config["analysisinfo"]).set_index("Name")
+
+def REMOTE_ADDRESS(filename):
+    entry = samples.loc[filename]
+    return config["project"]+entry["folder"] + "/" + filename + ".bed.gz"
+
+rule import_data:
     input:
-        DBox.remote("Shoeshine Boys/Real Book Vol 1.pdf")
+        lambda wildcards: DBox.remote(REMOTE_ADDRESS(wildcards.filename))
+    output:
+        "{species}/dedup/{filename}.bed.gz"
     shell:
-        "echo 'Hello World'"
+        "cp '{input}' {output}"

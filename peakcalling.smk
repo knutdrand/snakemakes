@@ -3,6 +3,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 macs_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.narrowPeak"]
 broad_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.broadPeak"]
@@ -56,7 +57,15 @@ rule call_broad_peak:
     run:
         genomesize=genome_sizes.get(wildcards.species, 2913022398)
         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
-        shell("""macs2 callpeak -t {input[0]} {control} -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""")
+        shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""" % control)
+
+rule merge_domains:
+    input:
+        "{species}/broadpeakcalling/{name}_peaks.broadPeak"
+    output:
+        "{species}/domains/{name}.bed"
+    shell:
+        "bedtools merge -d 5000 -i {input} > {output}"
 
 rule sort_peaks:
     input:

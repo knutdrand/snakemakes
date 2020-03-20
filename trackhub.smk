@@ -17,17 +17,23 @@ rule get_bdg2bw:
         chmod a+x {output}
         """
 
-rule create_bw_track:
-    input:
-        "src/bdg2bw",
-        "{species}/{name}.bdg",
-        "{species}/data/chrom.sizes.txt"
-    output:
-        "{species}/{name}.bw"
-    wildcard_constraints:
-        species="[^/]+"
-    shell:
-        "{input}"
+# rule create_bw_track:
+#     input:
+#         "src/bdg2bw",
+#         "{species}/{name}.bdg",
+#         "{species}/data/chrom.sizes.txt"
+#     output:
+#         temp("{species}/{name}.clean.bdg"),
+#         "{species}/{name}.clean.bw"
+#     wildcard_constraints:
+#         species="[^/]+"
+#     shell:
+#         """
+#         %s {input[1]} > {output[0]}
+#         {input[0]} {output[0]} {input[2]}
+#         """ % chromosome_grep
+
+
 
 rule move_to_trackhub:
     input:
@@ -47,16 +53,37 @@ rule trackhub:
     shell:
         'chiptools trackdb single {input} > {output}'
 
-rule download_chrom_sizes:
-    output:
-        "{species}/data/chromInfo.txt.gz"
-    shell:
-        "wget https://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.species}/database/chromInfo.txt.gz -O {output}"
-
-rule clean_chrom_sizes:
+rule clip_bw:
     input:
-        "{species}/data/chromInfo.txt.gz"
-    output:
+        "{species}/{name}.bdg",        
         "{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/{name}.bdg.clip"
+    wildcard_constraints:
+        species="[^/]+"
     shell:
-        "z"+chromosome_grep + " {input} > {output}"
+        "chiptools clipbed {input} > {output}"
+     
+# "%s {input[0]} | bedtools slop -i - -g {input[1]} -b 0 | bedClip stdin {input[1]} {output}" % chromosome_grep
+
+rule ucsc_sort:
+    input:
+        "{species}/{name}.bdg.clip"
+    output:
+        "{species}/{name}.bdg.clip.uscssort"
+    wildcard_constraints:
+        species="[^/]+"
+    shell:
+        "LC_COLLATE=C sort -k1,1 -k2,2n {input} -T tmp/ > {output}"
+
+rule create_bw_track:
+    input:
+        bedGraph="{species}/{name}.bdg.clip.uscssort",
+        chromsizes="{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/{name}.bw"
+    wildcard_constraints:
+        species="[^/]+"
+    shell:
+        "bedGraphToBigWig {input} {output}"
+#        "0.50.3/bio/ucsc/bedGraphToBigWig"
