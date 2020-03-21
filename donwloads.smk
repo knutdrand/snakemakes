@@ -1,4 +1,20 @@
 chromosome_grep = "grep -Ew -e 'chr[0-9]{{1,2}}' -e chrX -e chrY"
+annotations = {"susScr11": "ensembl"}
+
+rule download_reference:
+    output:
+        config["data_dir"] + "{species}/{species}.fa.gz"
+    shell:
+        "wget http://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.species}/bigZips/{wildcards.species}.fa.gz -O {output}"
+
+rule unzip_reference:
+    input:
+        config["data_dir"] + "{species}/{species}.fa.gz"
+    output:
+        config["data_dir"] + "{species}/{species}.fa"
+    shell:
+        "gunzip {input}"
+
 
 rule download_genes:
     output:
@@ -8,7 +24,7 @@ rule download_genes:
 
 rule get_genes_bed:
     input:
-        "{species}/data/refGene.txt.gz"
+        lambda wildcards: "{species}/data/%sGene.txt.gz" % annotations.get(wildcards.species, "ref")
     output:
         "{species}/data/genes.bed"
     shell:

@@ -33,9 +33,9 @@ def INPUT(name):
 # 
 
 def macs_input(wildcards):
-    i = ["{species}/dedup/{sample}.bed"]
+    i = ["{species}/dedup/{sample}.bed.gz"]
     if not pd.isnull(INPUT(wildcards.sample)):
-        i.append("{species}/dedup/%s.bed" % INPUT(wildcards.sample))
+        i.append("{species}/dedup/%s.bed.gz" % INPUT(wildcards.sample))
     return i
 
 rule callpeak:
@@ -47,7 +47,6 @@ rule callpeak:
         genomesize=genome_sizes.get(wildcards.species, 2913022398)
         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
         shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""" % control)
-
 
 rule call_broad_peak:
     input:
@@ -114,3 +113,15 @@ rule get_meme:
         "motives/{name}"
     shell:
         'wget {jaspar_address}{wildcards.name} -O {output} --user-agent="Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.6) Gecko/20070725 Firefox/2.0.0.6"'
+
+rule get_domain_coverage:
+    input:
+        "{species}/domains/{name}.bed",
+        "{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/domain_coverage/{name}.txt"
+    shell:
+        """
+        awk '{{t+=($3-$2)}}END{{print t}}' {input[0]} > {output}
+        awk '{{t+=$2}}END{{print t}}' {input[1]} >> {output}
+        """

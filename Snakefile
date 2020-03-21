@@ -1,13 +1,17 @@
-if False:
-    include: "dropbox.smk"
-else:
-    include: "mapping.smk"
-    include: "nels.smk"
-include: "peakcalling.smk"
-include: "trackhub.smk"
-include: "donwloads.smk"
-include: "regions.smk"
-include: "gc.smk"
+from pathlib import Path
+for name in config["analyses"]:
+    include: f"{name}.smk"
+
+# if False:
+#     include: "dropbox.smk"
+# else:
+#     include: "mapping.smk"
+#     include: "nels.smk"
+# include: "peakcalling.smk"
+# include: "trackhub.smk"
+# include: "donwloads.smk"
+# include: "regions.smk"
+# include: "gc.smk"
 
 
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
@@ -41,13 +45,24 @@ rule all_gc:
     input:
         [get_species(sample) + f"/gc_content/{sample}.txt" for sample in get_samples_for_analysis("GC")],
     output:
-        "hg38/v3/gc_content/ALL.tsv"
+        "gc_content/ALL.tsv",
     shell:
         """
         echo "domains_minus_tss500\tnon_tss_containing_domains\tdomain_flanks\ttss_containing_domains\tname" > {output}
         cat {input} >> {output}
         """
 
+rule all_coverage:
+    input:
+        [get_species(name) + f"/domain_coverage/{name}.txt" for name in get_samples_for_analysis("GB")]
+    output:
+        "domain_coverage.csv"
+    run:
+        with open(output[0], "w") as out_file:
+            out_file.write(",".join(("Sample", "DomainCoverage", "Genomesize", "Prct"))+"\n")
+            for in_file in input:
+                c, g = open(in_file).read().strip().split()
+                out_file.write(",".join([Path(in_file).stem, c, g, str(int(c)/int(g))])+"\n")
 
 rule full_screen_table:
     input:
@@ -74,3 +89,5 @@ rule screen_table:
         with open(output[0], "w") as f:
             for line in [names, humans_row, mouse_row]:
                 f.write("\t".join(line)+"\n")
+
+

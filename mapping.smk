@@ -29,11 +29,6 @@ rule cutadapt_se:
         "0.50.0/bio/cutadapt/se"
 #         cutadapt {params} -j {threads} -o {output.fastq} {input[0]} > {output.qc} 2> {log}
 
-rule download_reference:
-    output:
-        config["data_dir"] + "{species}/{species}.fa.gz"
-    shell:
-        "wget http://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.species}/bigZips/{wildcards.species}.fa.gz -O {output}"
 
 rule bwa_index:
     input:
@@ -70,19 +65,6 @@ rule filter:
     wrapper:
         "0.50.0/bio/samtools/view"
 
-# rule mark_duplicates:
-#     input:
-#         "{species}/mapped_filtered/{sample}.bam"
-#     output:
-#         bam="{species}/dedup/{sample}.bam",
-#         metrics="metrics/dedup/{species}/{sample}.txt"
-#     log:
-#         "logs/picard/dedup/{species}/{sample}.log"
-#     params:
-#         "REMOVE_DUPLICATES=true"
-#     wrapper:
-#         "0.50.0/bio/picard/markduplicates"
-
 rule samtools_remove_duplicates:
     input:
         "{species}/mapped_filtered/{sample}.bam"
@@ -114,3 +96,17 @@ rule fastq_screen:
     threads: 8
     wrapper:
         "0.50.0/bio/fastq_screen"
+
+#rule mapping_stats:
+#    input:
+#        [f"{{species}}/{folder}/{{sample}}.{ext}" for folder, ext in [("reads", "fastq.gz"), ("trimmed", "fastq.gz"), ("mapped_filtered", "bam"), ("dedup", "bam")]]
+#    output:
+#        "{species}/mappingstats/{sample.txt}"
+#    shell:
+#        """
+#        touch {output}
+#        zgrep ^@ {input[0]} | wc -l > {output}
+#        zgrep ^@ {input[1]} | wc -l > {output}
+#        samtools view {input[2]} | wc -l > {output}
+#        samtools view {input[3]} | wc -l > {output}
+#        """
