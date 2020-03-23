@@ -1,0 +1,24 @@
+name: chipseq
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - snakemake
+  - bowtie
+  - macs2
+  - bwa
+  - samtools
+  - bedtools
+  - matplotlib
+  - r
+  - cutadapt
+  - ucsc-bedgraphtobigwig
+  - ucsc-bedclip
+  - ucsc-bedtobigbed
+  - picard
+  - fastq-screen
+  - meme
+  - cigar
+prefix: /home/knut/miniconda3/envs/chipseq
+
