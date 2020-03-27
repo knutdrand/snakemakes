@@ -10,7 +10,7 @@ def REMOTE_ADDRESS(filename):
     
 rule import_data:
     output:
-        temp("raw/{filename}.fastq.gz")
+        "raw/{filename}.fastq.gz"
     run:
         remote_name = REMOTE_ADDRESS(wildcards.filename)
         shell("scp -i {config[nels_key]} {remote_name} {output}")

@@ -1,7 +1,8 @@
 from pathlib import Path
 for name in config["analyses"]:
     include: f"{name}.smk"
-
+include:
+    "analysis.smk"
 # if False:
 #     include: "dropbox.smk"
 # else:
@@ -15,6 +16,7 @@ for name in config["analyses"]:
 
 
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
+print(analysis_info)
 species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11"}
 
 def get_samples_for_analysis(analysis_name):
@@ -45,7 +47,7 @@ rule all_gc:
     input:
         [get_species(sample) + f"/gc_content/{sample}.txt" for sample in get_samples_for_analysis("GC")],
     output:
-        "gc_content/ALL.tsv",
+        "gc_content_summary.tsv",
     shell:
         """
         echo "domains_minus_tss500\tnon_tss_containing_domains\tdomain_flanks\ttss_containing_domains\tname" > {output}
@@ -72,6 +74,23 @@ rule full_screen_table:
     script:
         "scripts/combinefiles.R"
 
+rule human_domain_size_hist:
+    input:
+        [f"hg38/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("human_comparison")]
+    output:
+        "human_domain_sizes.png"
+    script:
+        "scripts/peak_histograms.py"
+
+rule species_domain_size_hist:
+    input:
+        [get_species(sample)+f"/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("species_comparison")]
+    output:
+        "species_domain_sizes.png"
+    script:
+        "scripts/peak_histograms.py"
+
+
 rule screen_table:
     input:
         expand("qc/fastq_screen/{sample}.txt", sample=get_samples_for_analysis("Screen"))
@@ -90,4 +109,29 @@ rule screen_table:
             for line in [names, humans_row, mouse_row]:
                 f.write("\t".join(line)+"\n")
 
+rule gzip:
+    input:
+        "{filename}"
+    output:
+        "{filename}.gz"
+    shell:
+        "gzip {input} --keep"
 
+names = analysis_info.index # get_samples_for_analysis("GB")
+rule mapping_stats:
+    input:
+        reads=[f"reads/{sample}.fastq.gz.count" for sample in names],
+        trimmed=[f"trimmed/{sample}.fastq.gz.count" for sample in names],
+        mapped=[get_species(sample)+f"/mapped_filtered/{sample}.bam.count" for sample in names],
+        dedup=[get_species(sample)+f"/dedup/{sample}.bam.count" for sample in names]
+    output:
+        "mapping_stats.csv"
+    run:
+        types = ["reads", "trimmed", "mapped", "dedup"]
+        get_count = lambda f: int(open(f).read().strip())
+        data = {t: [get_count(f) for f in getattr(input, t)] for t in types}
+        pd.DataFrame(data, index=names).to_csv(output[0])
+
+rule trimming_effects_all:
+    input:
+        expand("trimming_effects/{sample}.png", sample=names)

@@ -20,6 +20,8 @@ def MOTIF_FILE(tf):
     return "motives/{m}.meme".format(m=motifs[tf.lower()])
 
 def INPUT(name):
+    if not name in analysis_info:
+        return None
     return analysis_info.loc[name].at["Input"]
 
 # rule callpeak_wo_control:
@@ -33,9 +35,12 @@ def INPUT(name):
 # 
 
 def macs_input(wildcards):
+    print("HERE")
     i = ["{species}/dedup/{sample}.bed.gz"]
+    print(i)
     if not pd.isnull(INPUT(wildcards.sample)):
         i.append("{species}/dedup/%s.bed.gz" % INPUT(wildcards.sample))
+    print(i)
     return i
 
 rule callpeak:

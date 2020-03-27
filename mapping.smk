@@ -2,17 +2,17 @@ from snakemake.shell import shell
 import pandas as pd
 
 samples = pd.read_csv(config["sampleinfo"]).set_index("filename")
-
+analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
 def LANE_FILES(name):
     return sorted([i for i, e in  samples.loc[samples["name"]==name].iterrows()])
 
-rule merge_se:
-    input:
-        lambda wildcards: expand("raw/{sample}.fastq.gz", sample=LANE_FILES(wildcards.name))
-    output:
-        "reads/{name}.fastq.gz"
-    shell:
-        "zcat {input} | gzip > {output}"
+# rule merge_se:
+#     input:
+#         lambda wildcards: expand("raw/{sample}.fastq.gz", sample=LANE_FILES(wildcards.name))
+#     output:
+#         "reads/{name}.fastq.gz"
+#     shell:
+#         "zcat {input} | gzip > {output}"
 
 rule cutadapt_se:
     input:
@@ -97,7 +97,79 @@ rule fastq_screen:
     wrapper:
         "0.50.0/bio/fastq_screen"
 
-#rule mapping_stats:
+rule count_fastq:
+    input:
+        "{name}.fastq.gz"
+    output:
+        "{name}.fastq.gz.count"
+    shell:
+        "zcat {input} | awk '{{s++}}END{{print s/4}}' > {output}"
+
+rule count_bam:
+    input:
+        "{name}.bam"
+    output:
+        "{name}.bam.count"
+    shell:
+        "samtools view -c {input} > {output}"
+
+rule fastq_size_hist:
+    input:
+        "{folder}/{sample}.fastq.gz"
+    output:
+        "{folder}_sizehist/{sample}.txt"
+    params:
+        nbins=102,
+        bin_size=1,
+        do_log=False
+    wildcard_constraints:
+        sample="[^/]+"
+    shell:
+        "zcat {input} | awk '{{if (NR % 4 == 2) ++a[length()]}} END{{for (i in a) print i, a[i]}}' > {output}"
+#         "scripts/size_hist.py"
+
+rule trimming_effect_plot:
+    input:
+        "reads_sizehist/{sample}.txt",
+        "trimmed_sizehist/{sample}.txt"
+    output:
+        report("trimming_effects/{sample}.png", category="Trimming hist")
+    run:
+        get_values = lambda f: [(int(l), int(count)) for l, count in [line.split() for line in open(f)]]
+        values = [get_values(f) for f in input]
+        size = max(max(v) for v in values)
+        lines = []
+        
+        for i, (f, lable) in enumerate(zip(input, ("reads", "trimmed"))):
+            l, count = zip(*get_values(f))
+            plt.bar([p+i*0.5 for p in l], list(count), label=lable)
+            #a = np.zeros(size+1, dtype="int")
+            #for l, count in get_values(f).items():
+            #    a[l] = count
+            
+            #lines.append(plt.plot(a)[0])
+        #plt.legend(lines, ("reads", "trimmed"))
+        plt.savefig(output[0])
+
+rule fastqc_all:
+    input:
+        expand("qc/fastqc/{sample}.html", sample=analysis_info.index)
+        
+
+rule fastqc:
+    input:
+        "reads/{sample}.fastq.gz"
+    output:
+        html="qc/fastqc/{sample}.html",
+        zip="qc/fastqc/{sample}_fastqc.zip" 
+    params: ""
+    log:
+        "logs/fastqc/{sample}.log"
+    wrapper:
+        "0.50.4/bio/fastqc"
+
+
+#rule mapping_tats:
 #    input:
 #        [f"{{species}}/{folder}/{{sample}}.{ext}" for folder, ext in [("reads", "fastq.gz"), ("trimmed", "fastq.gz"), ("mapped_filtered", "bam"), ("dedup", "bam")]]
 #    output:
