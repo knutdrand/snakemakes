@@ -33,7 +33,9 @@ rule all:
     input:
         expand("qc/fastq_screen/{sample}.png", sample=get_samples_for_analysis("Screen")),
         [get_species(sample) + f"/motif_plots/{sample}.png" for sample in get_samples_for_analysis("Motif")],
-        expand("trackhub/{species}/trackDb.txt", species=trackhub_species)
+        expand("trackhub/{species}/trackDb.txt", species=trackhub_species),
+        "mapping_stats.png",
+        expand("trimming_effects/{sample}.png", sample=analysis_info.index)
 
 rule all_screen:
     input:
@@ -117,7 +119,7 @@ rule gzip:
     shell:
         "gzip {input} --keep"
 
-names = analysis_info.index # get_samples_for_analysis("GB")
+names = get_samples_for_analysis("GB") # analysis_info.index # 
 rule mapping_stats:
     input:
         reads=[f"reads/{sample}.fastq.gz.count" for sample in names],
@@ -135,3 +137,11 @@ rule mapping_stats:
 rule trimming_effects_all:
     input:
         expand("trimming_effects/{sample}.png", sample=names)
+
+rule barchart:
+    input:
+        "{sample}.csv"
+    output:
+        report("{sample}.png", category="Counts")
+    script:
+        "scripts/barplot.R"
