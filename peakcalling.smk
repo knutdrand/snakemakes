@@ -20,27 +20,14 @@ def MOTIF_FILE(tf):
     return "motives/{m}.meme".format(m=motifs[tf.lower()])
 
 def INPUT(name):
-    if not name in analysis_info:
+    if not name in analysis_info.index:
         return None
     return analysis_info.loc[name].at["Input"]
 
-# rule callpeak_wo_control:
-#     input:
-#         "{species}/dedup/{sample}.bed"
-#     output:
-#         expand("{{species}}/peakcalling/{{sample}}_{filetype}", filetype=macs_output)
-#     run:
-#         genomesize=genome_sizes.get(wildcards.species, 2913022398)
-#         shell("""macs2 callpeak -t {input} -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""")
-# 
-
 def macs_input(wildcards):
-    print("HERE")
     i = ["{species}/dedup/{sample}.bed.gz"]
-    print(i)
     if not pd.isnull(INPUT(wildcards.sample)):
         i.append("{species}/dedup/%s.bed.gz" % INPUT(wildcards.sample))
-    print(i)
     return i
 
 rule callpeak:
@@ -53,15 +40,35 @@ rule callpeak:
         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
         shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""" % control)
 
+# rule call_broad_peak:
+#     input:
+#         macs_input
+#     output:
+#         expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
+#     run:
+#         genomesize=genome_sizes.get(wildcards.species, 2913022398)
+#         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
+#         shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""" % control)
+# 
 rule call_broad_peak:
     input:
         macs_input
     output:
         expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
-    run:
-        genomesize=genome_sizes.get(wildcards.species, 2913022398)
-        control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
-        shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""" % control)
+    conda:
+        "envs/oldmacs.yaml"
+    script:
+        "scripts/macscall.py"
+
+rule call_broadpeak_pe:
+    input:
+        lambda wildcards: [f"{{species}}/dedup_pe/{t}.bam" for t in [wildcards.sample, INPUT(wildcards.sample)] if not pd.isnull(t) and not t is None]
+    output:
+        expand("{{species}}/broadpeakcallingpe/{{sample}}_{filetype}", filetype=broad_output)
+    params:
+        extra="-f BAMPE"
+    script:
+        "scripts/macscall.py"
 
 rule merge_domains:
     input:

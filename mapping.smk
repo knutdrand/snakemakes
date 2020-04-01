@@ -27,8 +27,6 @@ rule cutadapt_se:
     threads: 16 
     wrapper:
         "0.50.0/bio/cutadapt/se"
-#         cutadapt {params} -j {threads} -o {output.fastq} {input[0]} > {output.qc} 2> {log}
-
 
 rule bwa_index:
     input:
@@ -51,6 +49,22 @@ rule bwa_mem_se:
     threads: 16
     wrapper:
         "0.49.0/bio/bwa/mem"
+
+rule bwa_mem_pe:
+    input:
+        reads=expand("merged_sra_reads/{{sample}}_{read}.fastq.gz", read=[1,2])
+    output:
+        "{species}/mapped_pe/{sample}.bam"
+    log:
+        "logs/bwa_mem/{species}/{sample}.log"
+    params:
+        index=config["data_dir"]+"{species}/{species}.fa.gz",
+        sort="samtools",
+        sort_order="queryname"
+        # Can be 'none', 'samtools' or 'picard'.
+    threads: 16
+    wrapper:
+        "0.49.0/bio/bwa/mem"
 #        (bwa mem -t {threads} {params.index} {input.reads} | samtools sort -o {output}) 2> {log}
 
 rule filter:
@@ -65,6 +79,19 @@ rule filter:
     wrapper:
         "0.50.0/bio/samtools/view"
 
+rule filter_pe:
+    input:
+        "{folder}/{sample}.bam"
+    output:
+        "{folder}_pe_filtered/{sample}.bam"
+    params:
+        "-Bb -q 30 -F 1804 -f 2 {input} > {output[1]}" 
+    wildcard_constraints:
+        sample="[^/]+"
+    wrapper:
+        "0.50.0/bio/samtools/view"
+
+
 rule samtools_remove_duplicates:
     input:
         "{species}/mapped_filtered/{sample}.bam"
@@ -74,6 +101,34 @@ rule samtools_remove_duplicates:
         "logs/dedup/{species}/{sample}.log"
     shell:
         "samtools markdup -rs {input} {output} 2> {log}"
+
+rule tmp_sort:
+    input:
+        "{species}/mapped_pe_filtered/{sample}.bam"
+    output:
+        "{species}/mapped_pe_filtered_namesort/{sample}.bam"
+    shell:
+        "samtools sort -n {input} -o  {output}"
+
+rule fixmate:
+    input:
+        "{species}/mapped_pe_filtered_namesort/{sample}.bam"
+    output:
+        bam="{species}/mapped_pe_matefix/{sample}.bam"
+    shell:
+        "samtools fixmate --threads {threads} -mr {input} {output}"
+
+rule samtools_remove_duplicates_pe:
+    input:
+        "{species}/mapped_pe_matefix/{sample}.bam"
+    output:
+        bam="{species}/dedup_pe/{sample}.bam",
+    log:
+        "logs/dedup/{species}/{sample}.log"
+    threads:
+        4
+    shell:
+        "samtools sort {input} -o - | samtools markdup -rs --threads {threads} - {output} 2> {log}"
 
 rule bamtobed:
     input:

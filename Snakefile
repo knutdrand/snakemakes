@@ -111,11 +111,11 @@ rule screen_table:
             for line in [names, humans_row, mouse_row]:
                 f.write("\t".join(line)+"\n")
 
-rule gzip:
+rule gzip_bed:
     input:
-        "{filename}"
+        "{filename}.bed"
     output:
-        "{filename}.gz"
+        "{filename}.bed.gz"
     shell:
         "gzip {input} --keep"
 
