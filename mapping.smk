@@ -1,18 +1,7 @@
 from snakemake.shell import shell
 import pandas as pd
 
-samples = pd.read_csv(config["sampleinfo"]).set_index("filename")
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
-def LANE_FILES(name):
-    return sorted([i for i, e in  samples.loc[samples["name"]==name].iterrows()])
-
-# rule merge_se:
-#     input:
-#         lambda wildcards: expand("raw/{sample}.fastq.gz", sample=LANE_FILES(wildcards.name))
-#     output:
-#         "reads/{name}.fastq.gz"
-#     shell:
-#         "zcat {input} | gzip > {output}"
 
 rule cutadapt_se:
     input:
@@ -52,7 +41,7 @@ rule bwa_mem_se:
 
 rule bwa_mem_pe:
     input:
-        reads=expand("merged_sra_reads/{{sample}}_{read}.fastq.gz", read=[1,2])
+        reads=expand("pe_reads/{{sample}}_{read}.fastq.gz", read=[1,2])
     output:
         "{species}/mapped_pe/{sample}.bam"
     log:
@@ -112,7 +101,7 @@ rule tmp_sort:
 
 rule fixmate:
     input:
-        "{species}/mapped_pe_filtered_namesort/{sample}.bam"
+        "{species}/mapped_pe_filtered/{sample}.bam"
     output:
         bam="{species}/mapped_pe_matefix/{sample}.bam"
     shell:

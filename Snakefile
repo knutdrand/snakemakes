@@ -17,7 +17,7 @@ include:
 
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
 print(analysis_info)
-species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11"}
+species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11", "rat": "rn6"}
 
 def get_samples_for_analysis(analysis_name):
     if not analysis_name in analysis_info:
@@ -80,7 +80,7 @@ rule human_domain_size_hist:
     input:
         [f"hg38/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("human_comparison")]
     output:
-        "human_domain_sizes.png"
+        "human_domain_sizes.svg"
     script:
         "scripts/peak_histograms.py"
 
@@ -88,10 +88,13 @@ rule species_domain_size_hist:
     input:
         [get_species(sample)+f"/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("species_comparison")]
     output:
-        "species_domain_sizes.png"
+        "species_domain_sizes.svg"
     script:
         "scripts/peak_histograms.py"
 
+rule species_heatplots:
+    input:
+        [get_species(sample)+f"/heatplots/{sample}_{kind}.png" for sample in get_samples_for_analysis("species_comparison") for kind in ("treat_pileup", "control_lambda", "qvalues")]
 
 rule screen_table:
     input:
@@ -142,6 +145,6 @@ rule barchart:
     input:
         "{sample}.csv"
     output:
-        report("{sample}.png", category="Counts")
+        report("{sample}_bars.png", category="Counts")
     script:
         "scripts/barplot.R"

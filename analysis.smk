@@ -20,3 +20,14 @@ rule size_hist:
         bins /= np.sum(bins)
         x = np.exp(bin_size*np.arange(n_bins))
         np.savez(output[0], x=x, y=bins)
+
+rule heatplot:
+    input:
+        bedgraph="{root}/broadpeakcalling/{sample}_{kind}.bdg",
+        domains="{root}/clean_domains/{sample}.bed"
+    output:
+        multiext("{root}/heatplots/{sample}_{kind}", ".npy", ".png")
+    wildcard_constraints:
+        kind="treat_pileup|control_lambda|qvalues"
+    shell:
+        "cat {input.bedgraph} | chiptools heatplot {input.domains} {output}"

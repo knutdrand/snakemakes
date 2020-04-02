@@ -4,12 +4,10 @@ from snakemake.remote.dropbox import RemoteProvider as DropboxRemoteProvider
 import pandas as pd
 token = open(config["token"]).read().strip()
 DBox = DropboxRemoteProvider(oauth2_access_token=token)
-samples = pd.read_csv(config["sampleinfo"]).set_index("filename")
+samples = pd.read_csv(config["dropboxinfo"]).set_index("filename")
 analysis = pd.read_csv(config["analysisinfo"]).set_index("Name")
-print("in dropbox")
 sample_regexp = "|".join(samples.index).replace("+" ,"\+")
-print(sample_regexp)
-species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11"}
+species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11", "rat": "Rnor6"}
 get_species = lambda sample: species_dict[analysis.loc[sample].at["Species"]]
 
 def get_export_files():
@@ -17,9 +15,7 @@ def get_export_files():
     domains = [get_species(sample)+f"/domains/{sample}.bed.gz" for sample in samples]
     regions = ["domain_flanks", "tss_containing_domains", "non_tss_containing_domains"]
     regions = [get_species(sample)+f"/regions/{region}/{sample}.bed.gz" for sample in samples for region in regions]
-    print(domains)
-    print(regions)
-    return ["domain_coverage.csv", "human_domain_sizes.png", "species_domain_sizes.png", "gc_content_summary.tsv"]+domains + regions
+    return ["domain_coverage.csv", "human_domain_sizes.svg", "species_domain_sizes.svg", "gc_content_summary.tsv"] #+domains + regions
 
 def REMOTE_ADDRESS(filename):
     print(filename)

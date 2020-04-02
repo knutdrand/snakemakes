@@ -70,6 +70,15 @@ rule call_broadpeak_pe:
     script:
         "scripts/macscall.py"
 
+rule get_qvalues:
+    input:
+        "{macs_folder}/{sample}_treat_pileup.bdg",
+	"{macs_folder}/{sample}_control_lambda.bdg"
+    output:
+        "{macs_folder}/{sample}_qvalues.bdg"
+    shell:
+        "macs2 bdgcmp -t {input[0]} -c {input[1]} -m qpois -o {output}"
+
 rule merge_domains:
     input:
         "{species}/broadpeakcalling/{name}_peaks.broadPeak"
