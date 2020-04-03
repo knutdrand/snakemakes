@@ -2,7 +2,7 @@ chromosome_grep = "grep -Ew -e 'chr[0-9]{{1,2}}' -e chrX -e chrY"
 
 rule get_clean_domains:
     input:
-        "{species}/domains/{name}.bed",        
+        "{species}/domains/{name}.bed",
     output:
         "{species}/clean_domains/{name}.bed"
     shell:

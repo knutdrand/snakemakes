@@ -64,7 +64,7 @@ rule call_broadpeak_pe:
     input:
         lambda wildcards: [f"{{species}}/dedup_pe/{t}.bam" for t in [wildcards.sample, INPUT(wildcards.sample)] if not pd.isnull(t) and not t is None]
     output:
-        expand("{{species}}/broadpeakcallingpe/{{sample}}_{filetype}", filetype=broad_output)
+        expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
     params:
         extra="-f BAMPE"
     script:

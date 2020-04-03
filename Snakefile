@@ -3,6 +3,9 @@ for name in config["analyses"]:
     include: f"{name}.smk"
 include:
     "analysis.smk"
+wildcard_constraints:
+    species="|".join(config["species"]),
+
 # if False:
 #     include: "dropbox.smk"
 # else:
@@ -96,6 +99,11 @@ rule species_heatplots:
     input:
         [get_species(sample)+f"/heatplots/{sample}_{kind}.png" for sample in get_samples_for_analysis("species_comparison") for kind in ("treat_pileup", "control_lambda", "qvalues")]
 
+rule human_heatplots:
+    input:
+        [f"hg38/heatplots/{sample}_{kind}.png" for sample in get_samples_for_analysis("human_comparison") for kind in ("treat_pileup", "control_lambda", "qvalues")]
+
+
 rule screen_table:
     input:
         expand("qc/fastq_screen/{sample}.txt", sample=get_samples_for_analysis("Screen"))
@@ -116,9 +124,9 @@ rule screen_table:
 
 rule gzip_bed:
     input:
-        "{filename}.bed"
+        "{species}/{filename}.bed"
     output:
-        "{filename}.bed.gz"
+        "{species}/{filename}.bed.gz"
     shell:
         "gzip {input} --keep"
 

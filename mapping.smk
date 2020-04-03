@@ -2,6 +2,9 @@ from snakemake.shell import shell
 import pandas as pd
 
 analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
+wildcard_constraints:
+    species="|".join(config["species"]),
+    read="1|2"
 
 rule cutadapt_se:
     input:
@@ -50,35 +53,40 @@ rule bwa_mem_pe:
         index=config["data_dir"]+"{species}/{species}.fa.gz",
         sort="samtools",
         sort_order="queryname"
-        # Can be 'none', 'samtools' or 'picard'.
-    threads: 16
+    wildcard_constraints:
+        species="[^/]+"
+    threads:
+        16
     wrapper:
         "0.49.0/bio/bwa/mem"
 #        (bwa mem -t {threads} {params.index} {input.reads} | samtools sort -o {output}) 2> {log}
 
 rule filter:
     input:
-        "{folder}/{sample}.bam"
+        "{folder}mapped/{sample}.bam"
     output:
-        "{folder}_filtered/{sample}.bam"
+        "{folder}mapped_filtered/{sample}.bam"
     params:
         "-Bb -q 30" 
     wildcard_constraints:
         sample="[^/]+"
     wrapper:
-        "0.50.0/bio/samtools/view"
+        "0.50.4/bio/samtools/view"
 
 rule filter_pe:
     input:
-        "{folder}/{sample}.bam"
+        "{species}/{folder}_pe/{sample}.bam"
     output:
-        "{folder}_pe_filtered/{sample}.bam"
+        "{species}/{folder}_pe_filtered/{sample}.bam"
     params:
-        "-Bb -q 30 -F 1804 -f 2 {input} > {output[1]}" 
+        "-Bb -q 30 -F 1804 -f 2"
     wildcard_constraints:
-        sample="[^/]+"
-    wrapper:
-        "0.50.0/bio/samtools/view"
+        sample="[^/]+",
+        species="|".join(config["species"])
+    shell:
+        "samtools view {params} {input} > {output}"
+#     wrapper:
+#         "0.50.4/bio/samtools/view"
 
 
 rule samtools_remove_duplicates:
@@ -90,14 +98,6 @@ rule samtools_remove_duplicates:
         "logs/dedup/{species}/{sample}.log"
     shell:
         "samtools markdup -rs {input} {output} 2> {log}"
-
-rule tmp_sort:
-    input:
-        "{species}/mapped_pe_filtered/{sample}.bam"
-    output:
-        "{species}/mapped_pe_filtered_namesort/{sample}.bam"
-    shell:
-        "samtools sort -n {input} -o  {output}"
 
 rule fixmate:
     input:
@@ -121,11 +121,23 @@ rule samtools_remove_duplicates_pe:
 
 rule bamtobed:
     input:
-        "{name}.bam"
+        "{species}/dedup/{sample}.bam",
     output:
-        "{name}.bed"
+        "{species}/dedup/{sample}.bed",
     shell:
         "bedtools bamtobed -i {input} > {output}"
+
+rule bamtobedpe:
+    input:
+        "{species}/dedup_pe/{sample}.bam",
+    output:
+        "{species}/dedup_pe/{sample}.collated.bam",
+        "{species}/dedup_pe/{sample}.bed",
+    shell:
+        """
+        samtools collate {input} -o {output[0]}
+        bedtools bamtobed -i {output[0]} | chiptools pairbed {output[1]} | bedtools sort > {output}"
+        """
 
 rule fastq_screen:
     input:

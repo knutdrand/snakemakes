@@ -31,3 +31,13 @@ rule heatplot:
         kind="treat_pileup|control_lambda|qvalues"
     shell:
         "cat {input.bedgraph} | chiptools heatplot {input.domains} {output}"
+
+rule combined_heatplot:
+    input:
+        bedgraph="{root}/broadpeakcalling/{sample}_{kind}.bdg",
+        domains="{root}/clean_domains/{domainsample}.bed"
+    output:
+        multiext("{root}/heatplots/{domainsample}/{sample}_{kind}", ".npy", ".png")
+    shell:
+        "cat {input.bedgraph} | chiptools heatplot {input.domains} {output}"
+        
