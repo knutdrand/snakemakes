@@ -1,4 +1,4 @@
-chromosome_grep = "grep -Ew -e 'chr[0-9]{{1,2}}' -e chrX -e chrY"
+include: "rules/common.smk"
 annotations = {"susScr11": "ensembl"}
 
 rule download_reference:
@@ -28,7 +28,7 @@ rule get_genes_bed:
     output:
         "{species}/data/genes.bed"
     shell:
-        """z%s {input} | awk '{{OFS="\t"}}{{print $3, $5, $6, ".", ".", $4}}' > {output}""" % chromosome_grep
+        """z%s {input} | awk '{{OFS="\t"}}{{print $3, $5, $6, ".", ".", $4}}' | uniq > {output}""" % chromosome_grep
 
 rule download_chrom_sizes:
     output:
@@ -42,4 +42,4 @@ rule clean_chrom_sizes:
     output:
         "{species}/data/chrom.sizes.txt"
     shell:
-        "z"+chromosome_grep + " {input} > {output}"
+        f"z{chromosome_grep} {{input}} > {{output}}"

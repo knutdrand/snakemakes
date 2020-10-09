@@ -1,17 +1,10 @@
-from collections import defaultdict
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
+include: "rules/common.smk"
 import pandas as pd
-
+import os
 macs_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.narrowPeak"]
 broad_output=["treat_pileup.bdg", "control_lambda.bdg", "peaks.broadPeak"]
 genome_sizes = {"mm10": "mm", "hg38": "hs"}
 jaspar_address = "http://jaspar.genereg.net/api/v1/matrix/"
-
-
-analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
 
 def MOTIF_FILE(tf):
     motifs = {"oct4": "MA0142.1",
@@ -19,13 +12,18 @@ def MOTIF_FILE(tf):
               "sox2": "MA0143.1"}
     return "motives/{m}.meme".format(m=motifs[tf.lower()])
 
-def INPUT(name):
-    if not name in analysis_info.index:
-        return None
-    return analysis_info.loc[name].at["Input"]
+
+INPUT = lambda name: analysis_info.loc[name].at["Input"] if name in analysis_info.index else None
 
 def macs_input(wildcards):
     i = ["{species}/dedup/{sample}.bed.gz"]
+    name = wildcards.sample.split("subsampled_")[-1]
+    if not pd.isnull(INPUT(name)):
+        i.append("{species}/dedup/%s.bed.gz" % INPUT(name))
+    return i
+
+def subsampled_macs_input(wildcards):
+    i = ["{species}/subsampled/{n_reads}/{sample}.bed.gz"]
     if not pd.isnull(INPUT(wildcards.sample)):
         i.append("{species}/dedup/%s.bed.gz" % INPUT(wildcards.sample))
     return i
@@ -40,16 +38,6 @@ rule callpeak:
         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
         shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --outdir {wildcards.species}/peakcalling -n {wildcards.sample}""" % control)
 
-# rule call_broad_peak:
-#     input:
-#         macs_input
-#     output:
-#         expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
-#     run:
-#         genomesize=genome_sizes.get(wildcards.species, 2913022398)
-#         control="-c {input[1]}" if not pd.isnull(INPUT(wildcards.sample)) else ""
-#         shell("""macs2 callpeak -t {input[0]} %s -g {genomesize} --bdg --broad --outdir {wildcards.species}/broadpeakcalling -n {wildcards.sample}""" % control)
-# 
 rule call_broad_peak:
     input:
         macs_input
@@ -60,15 +48,38 @@ rule call_broad_peak:
     script:
         "scripts/macscall.py"
 
-rule call_broadpeak_pe:
+rule call_subsampled_broad_peak:
     input:
-        lambda wildcards: [f"{{species}}/dedup_pe/{t}.bam" for t in [wildcards.sample, INPUT(wildcards.sample)] if not pd.isnull(t) and not t is None]
+        subsampled_macs_input
     output:
-        expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
-    params:
-        extra="-f BAMPE"
+        expand("{{species}}/subsampled_broadpeakcalling/{{n_reads}}/{{sample}}_{filetype}", filetype=broad_output)
+    conda:
+        "envs/oldmacs.yaml"
     script:
         "scripts/macscall.py"
+
+
+rule frag_peak_call:
+    input:
+        macs_input
+    output:
+        expand("{{species}}/broadpeakcalling/{{sample}}_f{{fraglen}}bp_{filetype}", filetype=broad_output)
+    conda:
+        "envs/oldmacs.yaml"
+    params:
+        extra="--extsize {snakemake.wildcards.fraglen}"
+    script:
+        "scripts/macscall.py"
+
+# rule call_broadpeak_pe:
+#     input:
+#         lambda wildcards: [f"{{species}}/dedup_pe/{t}.bam" for t in [wildcards.sample, INPUT(wildcards.sample)] if not pd.isnull(t) and not t is None]
+#     output:
+#         expand("{{species}}/broadpeakcalling/{{sample}}_{filetype}", filetype=broad_output)
+#     params:
+#         extra="-f BAMPE"
+#     script:
+#         "scripts/macscall.py"
 
 rule get_qvalues:
     input:
@@ -98,7 +109,7 @@ rule sort_peaks:
 rule get_peak_sequences:
     input:
         peaks="{species}/peakcalling/{sample}_peaks.narrowPeak",
-        reference=config["data_dir"]+"/{species}/{species}.fa"
+        reference=os.path.join(config["data_dir"],"{species}/{species}.fa")
     output:
         "{species}/peak_fasta/{sample}.fa"
     shell:
@@ -119,15 +130,8 @@ rule motif_plot:
         "{species}/sorted_peaks/{sample}.narrowPeak"
     output:
         report("{species}/motif_plots/{sample}.png", category="Motif_plots")
-    run:
-        get_name = lambda parts: f"{parts[0]}:{parts[1]}-{parts[2]}"
-        matches = {line.split("\t")[2] for line in open(input[0]) if not line.startswith("#") and line.strip()}
-        hits = [get_name(line.split()) in matches for line in open(input[1])]
-        #hits = [(line[1:].strip() in matches) for line in open(input[1]) if line.startswith(">")]
-        ratio = np.cumsum(hits)/np.arange(1, len(hits)+1)
-        plt.plot(ratio)
-        print(output[0])
-        plt.savefig(output[0])
+    script:
+        "scripts/motifplot.py"
 
 rule get_meme:
     output:
@@ -137,10 +141,22 @@ rule get_meme:
 
 rule get_domain_coverage:
     input:
-        "{species}/domains/{name}.bed",
+        "{species}/clean_domains/{name}.bed",
         "{species}/data/chrom.sizes.txt"
     output:
         "{species}/domain_coverage/{name}.txt"
+    shell:
+        """
+        awk '{{t+=($3-$2)}}END{{print t}}' {input[0]} > {output}
+        awk '{{t+=$2}}END{{print t}}' {input[1]} >> {output}
+        """
+
+rule get_peak_coverage:
+    input:
+        "{species}/broadpeakcalling/{name}_peaks.broadPeak",
+        "{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/peak_coverage/{name}.txt"
     shell:
         """
         awk '{{t+=($3-$2)}}END{{print t}}' {input[0]} > {output}

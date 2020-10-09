@@ -12,24 +12,21 @@ else:
 if file_format in (".bed", ".broadPeak"):
     parts = (line.split() for line in f)
     sizes = (int(p[2])-int(p[1]) for p in parts)
-elif file_format== ".gappedPeak":
-    parts = (line.split() for line in open(snakemake.input[0]))
-    ds = ((int(s[2])-int(s[1]), [int(d) for d in s[10].split(",")]) for s in parts)
-    sizes = (block for p, blocks in ds for block in blocks if block not in (1, p))
 elif file_format == ".fastq":
     sizes = (len(line.strip()) for i, line in enumerate(f) if i % 4 == 1)
 else:
     assert False, (path, file_format)
 
-n_bins = snakemake.params.get("nbins", 250)
+n_bins = snakemake.params.get("nbins", 275)
 bin_size = snakemake.params.get("bin_size", 0.05)
 trans = np.log if  snakemake.params.get("do_log", True) else lambda x: x
 
-log_sizes = (trans(size) for size in sizes)
-size_bins = (min(s//bin_size, n_bins-1) for s in log_sizes)
+# log_sizes = (trans(size) for size in sizes)
+# size_bins = (min(s//bin_size, n_bins-1) for s in log_sizes)
 bins = np.zeros(n_bins, dtype="float")
 
-for sb in size_bins:
-    bins[int(sb)] += 1
-    x = np.exp(bin_size*np.arange(n_bins))
-    np.savez(snakemake.output[0], x=x, y=bins)
+for size in sizes:
+    size_bin = min(trans(size)//bin_size, n_bins-1)
+    bins[int(size_bin)] += size
+x = np.exp(bin_size*np.arange(n_bins))
+np.savez(snakemake.output[0], x=x, y=bins)

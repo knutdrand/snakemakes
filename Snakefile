@@ -1,56 +1,30 @@
+include: "rules/common.smk"
+
 from pathlib import Path
-for name in config["analyses"]:
+for name in config.get("analyses", ["mapping", "bdgplot", "trackhub", "peakcalling", "donwloads", "regions"]):
     include: f"{name}.smk"
-include:
-    "analysis.smk"
-wildcard_constraints:
-    species="|".join(config["species"]),
-
-# if False:
-#     include: "dropbox.smk"
-# else:
-#     include: "mapping.smk"
-#     include: "nels.smk"
-# include: "peakcalling.smk"
-# include: "trackhub.smk"
-# include: "donwloads.smk"
-# include: "regions.smk"
-# include: "gc.smk"
-
-
-analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
-print(analysis_info)
-species_dict = {"mouse": "mm10", "bovine": "bosTau8", "human": "hg38", "porcine": "susScr11", "zebra": "danRer11", "rat": "rn6"}
-
-def get_samples_for_analysis(analysis_name):
-    if not analysis_name in analysis_info:
-        return []
-    return list(analysis_info[analysis_info[analysis_name]==1].index)
-
-def get_species(sample):
-    return species_dict[analysis_info.loc[sample].at["Species"]]
 
 trackhub_species = [species_dict[s] for s in pd.unique(analysis_info[analysis_info["GB"]==1]["Species"])]
 
 rule all:
     input:
-        expand("qc/fastq_screen/{sample}.png", sample=get_samples_for_analysis("Screen")),
-        [get_species(sample) + f"/motif_plots/{sample}.png" for sample in get_samples_for_analysis("Motif")],
+        expand_analysis("qc/fastq_screen/{sample}.png", "Screen"),
+        expand_analysis("{species}/motif_plots/{sample}.png", "Motif"),
         expand("trackhub/{species}/trackDb.txt", species=trackhub_species),
         "mapping_stats.png",
         expand("trimming_effects/{sample}.png", sample=analysis_info.index)
 
 rule all_screen:
     input:
-        expand("qc/fastq_screen/{sample}.png", sample=get_samples_for_analysis("Screen"))
+        expand_analysis("qc/fastq_screen/{sample}.png","Screen")
         
 rule all_motifs:
     input:    
-        [get_species(sample) + f"/motif_plots/{sample}.png" for sample in get_samples_for_analysis("Motif")]
+        expand_analysis("{species}/motif_plots/{sample}.png", "Motif")
 
 rule all_gc:
     input:
-        [get_species(sample) + f"/gc_content/{sample}.txt" for sample in get_samples_for_analysis("GC")],
+        expand_analysis("{species}/gc_content/{sample}.txt", "GC")
     output:
         "gc_content_summary.tsv",
     shell:
@@ -61,9 +35,9 @@ rule all_gc:
 
 rule all_coverage:
     input:
-        [get_species(name) + f"/domain_coverage/{name}.txt" for name in get_samples_for_analysis("GB")]
+        expand_analysis("{species}/{{region}}_coverage/{sample}.txt", "GB")
     output:
-        "domain_coverage.csv"
+        "{region}_coverage.csv"
     run:
         with open(output[0], "w") as out_file:
             out_file.write(",".join(("Sample", "DomainCoverage", "Genomesize", "Prct"))+"\n")
@@ -73,7 +47,7 @@ rule all_coverage:
 
 rule full_screen_table:
     input:
-        expand("qc/fastq_screen/{sample}.txt", sample=get_samples_for_analysis("Screen"))
+        expand_analysis("qc/fastq_screen/{sample}.txt", "Screen")
     output:
         "full_fastq_table.txt"
     script:
@@ -81,23 +55,88 @@ rule full_screen_table:
 
 rule human_domain_size_hist:
     input:
-        [f"hg38/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("human_comparison")]
+        expand_analysis("hg38/domains_logsize_hist/{sample}.npz", "human_comparison")
     output:
-        "human_domain_sizes.svg"
+        multiext("human_domain_sizes.svg", ".svg", ".png")
     script:
         "scripts/peak_histograms.py"
+
+rule human_domain_size_hist_adj:
+    input:
+        expand_analysis("hg38/domains_adjsize_hist/{sample}.npz", "human_comparison")
+    output:
+        multiext("human_adj_domain_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
+rule species_domain_size_hist_adj:
+    input:
+        expand_analysis("{species}/domains_adjsize_hist/{sample}.npz", "species_comparison")
+    output:
+        multiext("species_adj_domain_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
 
 rule species_domain_size_hist:
     input:
-        [get_species(sample)+f"/domains_logsize_hist/{sample}.npz" for sample in get_samples_for_analysis("species_comparison")]
+        expand_analysis("{species}/domains_logsize_hist/{sample}.npz", "species_comparison")
     output:
-        "species_domain_sizes.svg"
+        multiext("species_domain_sizes", ".svg", ".png")
     script:
         "scripts/peak_histograms.py"
 
+rule species_peak_size_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling_hist_peaks/{sample}.npz", "species_comparison")
+    output:
+        multiext("species_peak_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
+rule human_peak_size_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling_hist_peaks/{sample}.npz", "human_comparison")
+    output:
+        multiext("human_peak_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
+rule species_gapped_peak_size_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling_hist_gapped_peaks/{sample}.npz", "species_comparison")
+    output:
+        multiext("species_gapped_peak_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
+rule human_gapped_peak_size_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling_hist_gapped_peaks/{sample}.npz", "human_comparison")
+    output:
+        multiext("human_gapped_peak_sizes", ".svg", ".png")
+    script:
+        "scripts/peak_histograms.py"
+
+rule human_signal_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling/{sample}_peaks.broadPeak", "human_comparison")
+    output:
+        multiext("human_signal_hist", ".svg", ".png")
+    script:
+        "scripts/signal_histogram.py"
+
+rule species_signal_hist:
+    input:
+        expand_analysis("{species}/broadpeakcalling/{sample}_peaks.broadPeak", "species_comparison")
+    output:
+        multiext("species_signal_hist", ".svg", ".png")
+    script:
+        "scripts/signal_histogram.py"
+
 rule species_heatplots:
     input:
-        [get_species(sample)+f"/heatplots/{sample}_{kind}.png" for sample in get_samples_for_analysis("species_comparison") for kind in ("treat_pileup", "control_lambda", "qvalues")]
+        [f"{get_species(sample)}/heatplots/{sample}_{kind}.png" for sample in get_samples_for_analysis("species_comparison") for kind in ("treat_pileup", "control_lambda", "qvalues")]
 
 rule human_heatplots:
     input:
@@ -106,37 +145,28 @@ rule human_heatplots:
 
 rule screen_table:
     input:
-        expand("qc/fastq_screen/{sample}.txt", sample=get_samples_for_analysis("Screen"))
+        expand_analysis("qc/fastq_screen/{sample}.txt", "Screen")
     output:
         "fastq_table.txt"
-    run:
-        names = ["Species"]+ [i.split("/")[-1].split(".")[0] for i in input]
-        humans_row = ["Human"] 
-        mouse_row = ["Mouse"]
-        for i in input:
-            parts = [line.split() for line in open(i)]
-            values = {p[0]: p[5] for p in parts  if p and p[0] in ("Mouse", "Human")}
-            humans_row.append(values["Human"])
-            mouse_row.append(values["Mouse"])
-        with open(output[0], "w") as f:
-            for line in [names, humans_row, mouse_row]:
-                f.write("\t".join(line)+"\n")
-
+    script:
+        "scripts/screen_table.py"
+        
 rule gzip_bed:
-    input:
-        "{species}/{filename}.bed"
-    output:
-        "{species}/{filename}.bed.gz"
-    shell:
-        "gzip {input} --keep"
+   input:
+       "{species}/{filename}.bed"
+   output:
+       "{species}/{filename}.bed.gz"
+   shell:
+       "gzip {input} --keep"
 
 names = get_samples_for_analysis("GB") # analysis_info.index # 
+print(names)
 rule mapping_stats:
     input:
         reads=[f"reads/{sample}.fastq.gz.count" for sample in names],
         trimmed=[f"trimmed/{sample}.fastq.gz.count" for sample in names],
-        mapped=[get_species(sample)+f"/mapped_filtered/{sample}.bam.count" for sample in names],
-        dedup=[get_species(sample)+f"/dedup/{sample}.bam.count" for sample in names]
+        mapped=expand_analysis("{species}/mapped_filtered/{sample}.bam.count", "GB"),
+        dedup=expand_analysis("{species}/dedup/{sample}.bam.count", "GB")
     output:
         "mapping_stats.csv"
     run:
@@ -156,3 +186,19 @@ rule barchart:
         report("{sample}_bars.png", category="Counts")
     script:
         "scripts/barplot.R"
+
+rule bedgz_count:
+    input:
+        "{filename}.bed.gz"
+    output:
+        "{filename}.bed.gz.count"
+    shell:
+        "z{chromosome_grep} {input} | wc -l > {output}"
+
+rule genome_size:
+    input:
+        "{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/data/genome_size.txt"
+    shell:
+        "awk '{{t+=$2}}END{{print t}}' {input} > {output}"

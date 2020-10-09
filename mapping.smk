@@ -1,10 +1,14 @@
 from snakemake.shell import shell
 import pandas as pd
+include: "rules/common.smk"
 
-analysis_info = pd.read_csv(config["analysisinfo"]).set_index("Name")
-wildcard_constraints:
-    species="|".join(config["species"]),
-    read="1|2"
+rule bamtobedpe2se:
+    input:
+        "{species}/dedup_pe/{sample}.bam",
+    output:
+        "{species}/dedup/{sample}_r1.bed.gz",
+    shell:
+        "samtools view -b -f 64 {input} | bedtools bamtobed -i - | %s | gzip > {output}" % chromosome_grep
 
 rule cutadapt_se:
     input:
@@ -17,8 +21,10 @@ rule cutadapt_se:
     log:
         "logs/cutadapt/{sample}.log"
     threads: 16 
-    wrapper:
-        "0.50.0/bio/cutadapt/se"
+    script:
+        "scripts/cutadaptse.py"
+    #wrapper:
+    #    "0.50.0/bio/cutadapt/se"
 
 rule bwa_index:
     input:
@@ -37,10 +43,12 @@ rule bwa_mem_se:
         "logs/bwa_mem/{species}/{sample}.log"
     params:
         index=config["data_dir"]+"{species}/{species}.fa.gz",
-        sort="samtools",             # Can be 'none', 'samtools' or 'picard'.
+        sort="samtools",
     threads: 16
-    wrapper:
-        "0.49.0/bio/bwa/mem"
+    script:
+        "scripts/bwamem.py"
+    #wrapper:
+    #    "0.49.0/bio/bwa/mem"
 
 rule bwa_mem_pe:
     input:
@@ -51,8 +59,8 @@ rule bwa_mem_pe:
         "logs/bwa_mem/{species}/{sample}.log"
     params:
         index=config["data_dir"]+"{species}/{species}.fa.gz",
-        sort="samtools",
-        sort_order="queryname"
+        # sort="samtools",
+        # sort_order="queryname"
     wildcard_constraints:
         species="[^/]+"
     threads:
@@ -70,8 +78,10 @@ rule filter:
         "-Bb -q 30" 
     wildcard_constraints:
         sample="[^/]+"
-    wrapper:
-        "0.50.4/bio/samtools/view"
+    script:
+        "scripts/samtoolsview.py"
+#    wrapper:
+#        "0.50.4/bio/samtools/view"
 
 rule filter_pe:
     input:
@@ -82,9 +92,21 @@ rule filter_pe:
         "-Bb -q 30 -F 1804 -f 2"
     wildcard_constraints:
         sample="[^/]+",
-        species="|".join(config["species"])
     shell:
         "samtools view {params} {input} > {output}"
+
+rule filter_pe_bad:
+    input:
+        "{species}/{folder}_pe/{sample}.bam"
+    output:
+        "{species}/{folder}_pe_filtered/unfiltered_{sample}.bam"
+    params:
+        "-Bb -F 1804 -f 2"
+    wildcard_constraints:
+        sample="[^/]+",
+    shell:
+        "samtools sort -n {input} -T {wildcards.sample}.tmp | samtools view {params} > {output}"
+
 #     wrapper:
 #         "0.50.4/bio/samtools/view"
 
@@ -127,24 +149,37 @@ rule bamtobed:
     shell:
         "bedtools bamtobed -i {input} > {output}"
 
-rule bamtobedpe:
+rule collatebam:
     input:
         "{species}/dedup_pe/{sample}.bam",
     output:
         "{species}/dedup_pe/{sample}.collated.bam",
+    shell:
+        "samtools collate {input} -o {output}"
+
+rule bamtobedpe:
+    input:
+        "{species}/dedup_pe/{sample}.collated.bam",
+    output:
         "{species}/dedup_pe/{sample}.bed",
     shell:
-        """
-        samtools collate {input} -o {output[0]}
-        bedtools bamtobed -i {output[0]} | chiptools pairbed {output[1]} | bedtools sort > {output}"
-        """
+        "bedtools bamtobed -i {input} | chiptools pairbed | bedtools sort > {output}"
+
+
+rule petoeaseq:
+    input:
+        "{species}/dedup_pe/{sample}.bed"
+    output:
+        "{species}/dedup_pe/{sample}.easeq.bed"
+    shell:
+        chromosome_grep + """ {input} | awk '{{OFS="\t"}}{{print $1,$2,$3,".",".","+"; print $1,$2,$3,".",".","-"}}' > {output}"""
 
 rule fastq_screen:
     input:
-        "reads/{sample}.fastq.gz"
+        "{folder}/{sample}.fastq.gz"
     output:
-        txt="qc/fastq_screen/{sample}.txt",
-        png=report("qc/fastq_screen/{sample}.png", category="SpeciesScreen")
+        txt="qc/fastq_screen/{folder}/{sample}.txt",
+        png=report("qc/fastq_screen/{folder}/{sample}.png", category="SpeciesScreen")
     params:
         fastq_screen_config=config["data_dir"]+"fastq_screen_config.txt",
         subset=1000000,
@@ -182,6 +217,7 @@ rule fastq_size_hist:
         sample="[^/]+"
     shell:
         "zcat {input} | awk '{{if (NR % 4 == 2) ++a[length()]}} END{{for (i in a) print i, a[i]}}' > {output}"
+
 #         "scripts/size_hist.py"
 
 rule trimming_effect_plot:
@@ -211,6 +247,14 @@ rule fastqc_all:
     input:
         expand("qc/fastqc/{sample}.html", sample=analysis_info.index)
         
+rule fragment_size_hist:
+    input:
+        "{species}/dedup_pe/{sample}.bed"
+    output:
+        data="{species}/pe_frag_size/{sample}.npy",
+        fig="{species}/pe_frag_size/{sample}.png"
+    script:
+        "scripts/fragment_size_hist.py"
 
 rule fastqc:
     input:
@@ -224,6 +268,23 @@ rule fastqc:
     wrapper:
         "0.50.4/bio/fastqc"
 
+rule clean_dedup:
+    input:
+        "{folder}/dedup/{sample}.bed.gz"
+    output:
+        "{folder}/clean_dedup/{sample}.bed.gz"
+    shell:
+        "z%s {input} | gzip > {output}" % chromosome_grep
+
+rule subsample:
+    input:
+        "{species}/dedup/{sample}.bed.gz"
+    output:
+        "{species}/dedup/{sample}_{n_reads}reads.bed.gz"
+    wildcard_constraints:
+        n_reads = "\d*"
+    shell:
+        "zcat {input} | shuf -n {wildcards.n_reads} | gzip > {output}"
 
 #rule mapping_tats:
 #    input:

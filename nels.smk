@@ -5,13 +5,14 @@ NELS = "u1452@nelstor0.cbu.uib.no:/elixir-chr/nels/users/u1452/Projects/UiO_Dahl
 samples = pd.read_csv(config["nelsinfo"]).set_index("filename")
 pools = set(samples["name"])
 
-def get_pool(pool, read):
-    return [sample for sample in sorted(samples[samples["name"]==pool].index) if sample.endswith(str(read))]
-    
+get_pool = lambda pool, read: [sample for sample in 
+                               sorted(samples[samples["name"]==pool].index)
+                               if sample.endswith(str(read))]
 
-def REMOTE_ADDRESS(filename):
-    entry = samples.loc[filename]
-    return NELS+config["nelsfolder"]+entry["folder"] + "/" + filename + ".fastq.gz"
+REMOTE_ADDRESS = lambda filename: os.path.join(
+    NELS, config["nelsfolder"], samples.loc[filename]["folder"], f"{filename}.fastq.gz")
+
+LANE_FILES = lambda name: sorted([i for i, e in  samples.loc[samples["name"]==name].iterrows()])
     
 rule nels_import_data:
     output:
@@ -33,9 +34,6 @@ rule merge_nels:
 rule nels_import_all:
     input:
         expand("raw/{filename}.fastq.gz", filename=samples.index)
-
-def LANE_FILES(name):
-    return sorted([i for i, e in  samples.loc[samples["name"]==name].iterrows()])
 
 # rule merge_se:
 #     input:

@@ -1,4 +1,4 @@
-chromosome_grep = "grep -Ew -e 'chr[0-9]{{1,2}}' -e chrX -e chrY"
+include: "rules/common.smk"
 
 rule get_clean_domains:
     input:
@@ -6,7 +6,7 @@ rule get_clean_domains:
     output:
         "{species}/clean_domains/{name}.bed"
     shell:
-        chromosome_grep + " {input}>{output}"
+        f"{chromosome_grep} {{input}} > {{output}}"
 
 rule get_tss:
     input:
@@ -14,7 +14,7 @@ rule get_tss:
     output:
         "{species}/regions/tss/1.bed"
     shell:
-        """awk '{{OFS="\t"}}{{if ($6=="+") {{print $1,$2,$2+1}} else {{print $1, $3-1, $3}}}}' {input} | uniq > {output}"""
+        """awk '{{OFS="\t"}}{{if ($6=="+") {{print $1,$2,$2+1,".",".",$6}} else {{print $1, $3-1, $3,".",".",$6}}}}' {input} | sort | uniq > {output}"""
 
 rule get_tss_500:
     input:
@@ -43,6 +43,16 @@ rule get_tss_containing_domains:
     shell:
         """bedtools intersect -a {input[0]} -b {input[1]} -c | awk '{{if ($NF>0) print}}' > {output}"""
 
+rule filter_small:
+    input:
+        "{species}/regions/{folder}/{sample}.bed"
+    output:
+        "{species}/regions/{folder}/sub{size}/{sample}.bed"
+    wildcard_constraints:
+        size="\d+"
+    shell:
+        """awk '{{if ($3-$2<={wildcards.size}) print}}' {input} > {output}"""
+
 rule get_non_tss_containing_domains:
     input:
         "{species}/clean_domains/{name}.bed",
@@ -61,3 +71,11 @@ rule get_tss_containing_domains_minus_tss500:
     shell:
         "bedtools subtract -a {input[0]} -b {input[1]} > {output}"
 
+rule get_windows:
+    input:
+        "{species}/data/chrom.sizes.txt"
+    output:
+        "{species}/regions/windows/{windowsize}.bed"
+    shell:
+        "bedtools makewindows -g {input} -w {wildcards.windowsize} > {output}"
+    
